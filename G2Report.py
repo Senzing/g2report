@@ -14,12 +14,23 @@ import time
 from multiprocessing import Value
 from operator import itemgetter
 
+# Import from Senzing.
+
+try:
+    from senzing import G2ModuleException, G2Product
+except:
+    from G2Project import G2Project
+    from G2Exception import G2ModuleException
+
+try:
+    from G2Database import G2DBException
+except:
+    from G2Exception import G2DBException
+
 #--project classes
 from G2Database import G2Database
 from G2ConfigTables import G2ConfigTables
-from G2Project import G2Project
 from G2Module import G2Module
-import G2Exception
 
 #---------------------------------------------------------------------
 #-- g2 report
@@ -34,7 +45,7 @@ def buildReport():
     try:
         g2_module = G2Module('pyG2Export', g2iniPath, False)
         g2_module.init()
-    except G2Exception.G2ModuleException as ex:
+    except G2ModuleException as ex:
         print('ERROR: could not start the G2 module at ' + g2iniPath)
         print(ex)
         shutDown()
@@ -76,7 +87,7 @@ def buildReport():
         resolvedID = rowData['RESOLVED_ENTITY_ID']
         lensID = rowData['LENS_ID']
         resumeRows = []
-        while rowData and rowData['RESOLVED_ENTITY_ID'] == resolvedID and rowData['LENS_ID'] == lensID:    
+        while rowData and rowData['RESOLVED_ENTITY_ID'] == resolvedID and rowData['LENS_ID'] == lensID:
             rowData['LENS_ID'] = int(rowData['LENS_ID'])
             rowData['RESOLVED_ENTITY_ID'] = int(rowData['RESOLVED_ENTITY_ID'])
             rowData['RELATED_ENTITY_ID'] = int(rowData['RELATED_ENTITY_ID'])
@@ -91,7 +102,7 @@ def buildReport():
 
             resumeRows.append(rowData)
             rowData = g2_module.fetchCsvExportRecord(exportHandle, exportColumnHeaders)
-            
+
         #--update dbreport category counts
         for category in categoryCounters:
             if category in dbreportCounters:
@@ -135,7 +146,7 @@ def buildReport():
         if dbreportSummaryList:
             dbReportSummaryInsert = 'insert into DBREPORT_CATEGORY (ENTITY_CATEGORY, ENTITY_COUNT, RECORD_COUNT, SINGLE_COUNT) values (?, ?, ?, ?)'
             try: odsDbo.execMany(dbReportSummaryInsert, dbreportSummaryList)
-            except G2Exception.G2DBException as err:
+            except G2DBException as err:
                 for x in dbreportSummaryList:
                     print(x)
                 print('')
@@ -154,8 +165,8 @@ def processEntityResume(resumeRows):
     ''' processing for an entity resume '''
 
     #--get sql statements and clear insert lists
-    dsrcRecordInsert = getSqlStatment('dsrcRecordInsert',odsDbo.dbType) 
-    resolvedEntityInsert = getSqlStatment('resolvedEntityInsert',odsDbo.dbType) 
+    dsrcRecordInsert = getSqlStatment('dsrcRecordInsert',odsDbo.dbType)
+    resolvedEntityInsert = getSqlStatment('resolvedEntityInsert',odsDbo.dbType)
     entityResumeInsert = getSqlStatment('entityResumeInsert',odsDbo.dbType)
     dbReportMatchInsert = getSqlStatment('dbReportMatchInsert',odsDbo.dbType)
     dsrcRecordList = []
@@ -175,8 +186,8 @@ def processEntityResume(resumeRows):
             dsrcRecordData.append(rowData['DATA_SOURCE'])
             dsrcRecordData.append(rowData['RECORD_ID'])
             dsrcRecordData.append(rowData['ENTITY_TYPE'])
-            dsrcRecordData.append(rowData['ENTITY_KEY']) 
-            dsrcRecordData.append(rowData['ENTITY_KEY']) #--really obs_ent_hash 
+            dsrcRecordData.append(rowData['ENTITY_KEY'])
+            dsrcRecordData.append(rowData['ENTITY_KEY']) #--really obs_ent_hash
             dsrcRecordData.append(valuesByClass['NAME'] if 'NAME' in valuesByClass else None)
             dsrcRecordData.append(valuesByClass['ATTRIBUTE'] if 'ATTRIBUTE' in valuesByClass else None)
             dsrcRecordData.append(valuesByClass['IDENTIFIER'] if 'IDENTIFIER' in valuesByClass else None)
@@ -200,29 +211,29 @@ def processEntityResume(resumeRows):
 
     #--update the database
     try: odsDbo.execMany(dsrcRecordInsert, dsrcRecordList)
-    except G2Exception.G2DBException as err:
+    except G2DBException as err:
         for x in dsrcRecordList:
             print(x)
         print('')
         print(err)
         print('ERROR: could not insert into DSRC_RECORD table')
         shutDown()
-    
+
     try: odsDbo.execMany(resolvedEntityInsert, resolvedEntityList)
-    except G2Exception.G2DBException as err:
+    except G2DBException as err:
         for x in resolvedEntityList:
             print(x)
         print('')
         print(err)
         print('ERROR: could not insert into RESOLVED_ENTITY table')
         shutDown()
-    
+
     #--de-dupe entity resume insert list due to bug!!! (remove when bug fixed)
     entityResumeList = [list(i) for i in set(tuple(i) for i in entityResumeList)]
     #--de-dupe entity resume insert list due to bug!!! (remove when bug fixed)
 
     try: odsDbo.execMany(entityResumeInsert, entityResumeList)
-    except G2Exception.G2DBException as err:
+    except G2DBException as err:
         for x in entityResumeList:
             print(x)
         print('')
@@ -232,7 +243,7 @@ def processEntityResume(resumeRows):
 
     if dbReportMatchList:
         try: odsDbo.execMany(dbReportMatchInsert, dbReportMatchList)
-        except G2Exception.G2DBException as err:
+        except G2DBException as err:
             for x in dbReportMatchList:
                 print(x)
             print('')
@@ -240,7 +251,7 @@ def processEntityResume(resumeRows):
             print('ERROR: could not insert into DBREPORT_MATCHES table')
             shutDown()
 
-    return 
+    return
 
 #---------------------------------------
 def organizeResume(resumeRows):
@@ -269,7 +280,7 @@ def organizeResume(resumeRows):
                     matchKey = matchKey = ''
                 if featCode[0] == '+':
                     plusFeats += featCode[1:] if len(plusFeats) == 0 else featCode
-                else:            
+                else:
                     minusFeats += featCode
                 if featCode[0] == '+'and 'NAME' in featCode and 'NAME' in rowData['MATCH_KEY']:
                     matchScore += 10
@@ -339,7 +350,7 @@ def processResolvedEntity(resumeData, relatedIDstr, resolvedEntityList, entityRe
         #--choose minimum record ID and name as the best values to represent the resolved entity
         resolvedFirstRecordID = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['RECORD_LIST'][0]['RECORD_ID']
         resolvedName = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['RECORD_LIST'][0]['ENTITY_NAME']
-        auditKey = resumeData['RESOLVED_ENTITY_ID']   #--resolvedFirstRecordID (needs more work)  
+        auditKey = resumeData['RESOLVED_ENTITY_ID']   #--resolvedFirstRecordID (needs more work)
         #--get max match_score for the category
         auditScore = 20
         #--attempt to find best score for a duplicate that may have muliple (disabled for now as too confusing)
@@ -352,14 +363,14 @@ def processResolvedEntity(resumeData, relatedIDstr, resolvedEntityList, entityRe
         resolvedEntityData = []
         resolvedEntityData.append(resumeData['RESOLVED_ENTITY_ID'])
         resolvedEntityData.append(resumeData['LENS_ID'])
-        resolvedEntityData.append(resolvedName if resolvedName else 'unknown') 
+        resolvedEntityData.append(resolvedName if resolvedName else 'unknown')
         resolvedEntityData.append(resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['DATA_SOURCE'])
         resolvedEntityData.append(resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['ENTITY_TYPE'])
         resolvedEntityData.append(len(recordIdList))
         resolvedEntityData.append(recordIdList[0] if recordIdList else 'none')
         resolvedEntityList.append(resolvedEntityData)
 
-        #--process each record 
+        #--process each record
         recordSeq = 0
         recordRowList = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['RECORD_LIST']
         for resumeRow in recordRowList:
@@ -385,7 +396,7 @@ def processResolvedEntity(resumeData, relatedIDstr, resolvedEntityList, entityRe
             dbReportMatchData.append(auditKey) #--audit key
             dbReportMatchData.append(resolvedName if resolvedName else 'unknown') #--audit name
             dbReportMatchData.append(auditScore) #--audit score
-            dbReportMatchData.append(recordSeq) 
+            dbReportMatchData.append(recordSeq)
             dbReportMatchData.append(0 if not resumeRow['ERRULE_CODE'] else 1) #--match_type
             dbReportMatchData.append('Base record' if not resumeRow['ERRULE_CODE'] else 'Duplicate') #--match_level
             dbReportMatchData.append(resumeRow['MATCH_KEY'])
@@ -402,28 +413,28 @@ def processResolvedEntity(resumeData, relatedIDstr, resolvedEntityList, entityRe
             if len(resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['RECORD_IDS']) > 1:
                 entityCategory1 = resumeRow['ENTITY_CATEGORY']
                 entityCategory2 = resumeRow['ENTITY_CATEGORY']
-                dbReportMatchDataCopy = list(dbReportMatchData) 
+                dbReportMatchDataCopy = list(dbReportMatchData)
                 dbReportMatchDataCopy[0] = entityCategory1
                 dbReportMatchDataCopy[1] = entityCategory2
                 dbReportMatchDataCopy[6] = 1000 + dbReportMatchDataCopy[6]
                 dbReportMatchList.append(dbReportMatchDataCopy)
-            
+
             #--put it on both sides of the cross category duplicate report if there are records in other resumeData['RECORDS'][relatedIDstr]['CATEGORIES']
             for crossCategory in resumeData['RECORDS'][relatedIDstr]['CATEGORIES']:
                 crossFirstRecordID = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][crossCategory]['RECORD_LIST'][0]['RECORD_ID']
                 crossName = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][crossCategory]['RECORD_LIST'][0]['ENTITY_NAME']
-                crossAuditKey = resumeData['RESOLVED_ENTITY_ID']   
-                #--crossAuditKey = resolvedFirstRecordID (needs more work)  
+                crossAuditKey = resumeData['RESOLVED_ENTITY_ID']
+                #--crossAuditKey = resolvedFirstRecordID (needs more work)
 
                 if resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][crossCategory]['ENTITY_CATEGORY'] != resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['ENTITY_CATEGORY']:
                     #--add side 1
-                    dbReportMatchDataCopy = list(dbReportMatchData) 
+                    dbReportMatchDataCopy = list(dbReportMatchData)
                     dbReportMatchDataCopy[0] = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['ENTITY_CATEGORY']
                     dbReportMatchDataCopy[1] = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][crossCategory]['ENTITY_CATEGORY']
                     dbReportMatchDataCopy[6] = 2000 + dbReportMatchDataCopy[6]
                     dbReportMatchList.append(dbReportMatchDataCopy)
                     #--add side 2
-                    dbReportMatchDataCopy = list(dbReportMatchData) 
+                    dbReportMatchDataCopy = list(dbReportMatchData)
                     dbReportMatchDataCopy[1] = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][entityCategory]['ENTITY_CATEGORY']
                     dbReportMatchDataCopy[0] = resumeData['RECORDS'][relatedIDstr]['CATEGORIES'][crossCategory]['ENTITY_CATEGORY']
                     dbReportMatchDataCopy[3] = crossAuditKey
@@ -482,7 +493,7 @@ def processRelatedEntity(resumeData, relatedIDstr, entityResumeList, dbReportMat
     #    relatedMatchType = 4
     #    relatedMatchLevel = str(matchLevel) + 'Unknown'
 
-    #--compare each resolved entity category to the related entity categories 
+    #--compare each resolved entity category to the related entity categories
     for resolvedCategory in resumeData['RECORDS'][resolvedIDstr]['CATEGORIES']:
 
         #--choose minimum record ID and name as the best values to represent the resolved entity
@@ -498,7 +509,7 @@ def processRelatedEntity(resumeData, relatedIDstr, entityResumeList, dbReportMat
             okToContinue = True
             if resolvedCategory == relatedCategory:
                okToContinue = resolvedFirstRecordID < relatedFirstRecordID
-            if okToContinue:    
+            if okToContinue:
 
                 #--assign the audit key
                 auditKey = str(resumeData['RESOLVED_ENTITY_ID']) + '-' + str(resumeData['RECORDS'][relatedIDstr]['RELATED_ENTITY_ID'])
@@ -516,7 +527,7 @@ def processRelatedEntity(resumeData, relatedIDstr, entityResumeList, dbReportMat
                     dbReportMatchData.append(auditKey) #--audit key
                     dbReportMatchData.append(resolvedName if resolvedName else 'unknown') #--audit name
                     dbReportMatchData.append(matchScore) #--audit score
-                    dbReportMatchData.append(1000 + recordSeq) 
+                    dbReportMatchData.append(1000 + recordSeq)
                     dbReportMatchData.append(0) #--match_type
                     dbReportMatchData.append('Base record') #--match_level
                     dbReportMatchData.append(None) #--match_key
@@ -542,7 +553,7 @@ def processRelatedEntity(resumeData, relatedIDstr, entityResumeList, dbReportMat
                     dbReportMatchData.append(auditKey) #--audit key
                     dbReportMatchData.append(resolvedName if resolvedName else 'unknown') #--audit name
                     dbReportMatchData.append(matchScore) #--audit score
-                    dbReportMatchData.append(2000 + recordSeq) 
+                    dbReportMatchData.append(2000 + recordSeq)
                     dbReportMatchData.append(relatedMatchType) #--match_type
                     dbReportMatchData.append(relatedMatchLevel) #--match_level
                     dbReportMatchData.append(matchKey) #--match_key
@@ -622,7 +633,7 @@ def buildReportSummary():
 #---------------------------------------
 def exportToCsv():
 
-    print('')    
+    print('')
     print('Exporting to %s ...' % outputFilePath)
 
     headerList1 = []
@@ -639,7 +650,7 @@ def exportToCsv():
     headerList1.append('DISCLOSED_RELATIONSHIPS')
 
     headerList2 = []
-    headerList2.append('ENTITY_CATEGORY1') 
+    headerList2.append('ENTITY_CATEGORY1')
     headerList2.append('ENTITY_CATEGORY2')
     headerList2.append('REPORT_CATEGORY')
     headerList2.append('AUDIT_KEY')
@@ -666,7 +677,7 @@ def exportToCsv():
     headerList2.append('OTHER_DATA')
 
     #--open the combined output file for writing
-    try: 
+    try:
         outputFileHandle = open(outputFilePath, "w")
         outputFileWriter = csv.writer(outputFileHandle, dialect=csv.excel, quoting=csv.QUOTE_ALL)
     except csv.Error as err:
@@ -674,7 +685,7 @@ def exportToCsv():
         print('ERROR: Could not open %s for writing' % outputFilePath)
         shutDown()
         return
-    
+
     #--write the summary records
     try: outputFileWriter.writerow(headerList1)
     except csv.Error as err:
@@ -701,7 +712,7 @@ def exportToCsv():
         except:
             print('ERROR: could not write to %s' % (outputFilePath))
             shutDown()
-    
+
     #--write the detail records
     if not shutDownStatus.value:
         try: outputFileWriter.writerow(headerList2)
@@ -731,7 +742,7 @@ def exportToCsv():
             if categoryKey in categoryCounter:
                 categoryCounter[categoryKey] +=1
             else:
-                categoryCounter[categoryKey] = 1             
+                categoryCounter[categoryKey] = 1
 
             #--only export if within limit
             if categoryCounter[categoryKey] <= reportCategoryLimit or reportCategoryLimit == 0:
@@ -742,7 +753,7 @@ def exportToCsv():
                         print('ERROR: could not write to %s' % (outputFilePath))
                         shutDown()
 
-            #--shut down if errors hit 
+            #--shut down if errors hit
             if shutDownStatus.value:
                 break
 
@@ -832,7 +843,7 @@ def getSqlStatment(statementName, dbType):
         sql += 'from DSRC_RECORD '
         sql += 'where ENTITY_KEY = ? and DATA_SOURCE = ? and ENTITY_TYPE = ?'
 
-    if statementName == 'resolvedEntityInsert': 
+    if statementName == 'resolvedEntityInsert':
         sql = 'insert into RESOLVED_ENTITY ('
         sql += ' RESOLVED_ID,'
         sql += ' LENS_ID,'
@@ -843,7 +854,7 @@ def getSqlStatment(statementName, dbType):
         sql += ' MIN_RECORD_ID) '
         sql += 'values (?, ?, ?, ?, ?, ?, ?)'
 
-    if statementName == 'entityResumeInsert': 
+    if statementName == 'entityResumeInsert':
         sql = 'insert into ENTITY_RESUME ('
         sql += ' RESOLVED_ID,'
         sql += ' LENS_ID,'
@@ -857,7 +868,7 @@ def getSqlStatment(statementName, dbType):
         sql += ' ERRULE_CODE) '
         sql += 'values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 
-    if statementName == 'dbReportMatchInsert': 
+    if statementName == 'dbReportMatchInsert':
         sql = 'insert into DBREPORT_MATCHES ('
         sql += ' ENTITY_CATEGORY1,'
         sql += ' ENTITY_CATEGORY2,'
@@ -871,11 +882,11 @@ def getSqlStatment(statementName, dbType):
         sql += ' MATCH_KEY,'
         sql += ' REF_SCORE,'
         sql += ' ERRULE_CODE,'
-        sql += ' RESOLVED_ID,' 
-        sql += ' LENS_ID,' 
+        sql += ' RESOLVED_ID,'
+        sql += ' LENS_ID,'
         sql += ' RELATED_ID,'
         sql += ' DATA_SOURCE,'
-        sql += ' RECORD_ID,'  
+        sql += ' RECORD_ID,'
         sql += ' ENTITY_TYPE)'
         sql += 'values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 
@@ -964,7 +975,7 @@ def pause(question='PRESS ENTER TO CONTINUE ...'):
 
 #----------------------------------------
 if __name__ == '__main__':
-    shutDownStatus = Value('i', 0)    
+    shutDownStatus = Value('i', 0)
     signal.signal(signal.SIGINT, signal_handler)
 
     appPath = os.path.dirname(os.path.abspath(sys.argv[0]))
